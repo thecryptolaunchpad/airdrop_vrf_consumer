@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
-// An example of a consumer contract that relies on a subscription for funding.
-pragma solidity ^0.8.7;
+pragma solidity 0.8.4;
 
 import "@chainlink/contracts/src/v0.8/interfaces/VRFCoordinatorV2Interface.sol";
 import "@chainlink/contracts/src/v0.8/VRFConsumerBaseV2.sol";
@@ -39,26 +38,29 @@ contract VRFv2Consumer is VRFConsumerBaseV2 {
   address[] public contestants;
   uint256 announcement_date;
   //uint[] public shuffled;
-  uint256[] public s_randomWords;
+  uint256[] private s_randomWords;
   uint256 public s_requestId;
   address s_owner;
+
   
   event Shuffled(uint[] indexed result);
-
+  event WinnerEvent(address[] winners);
 
      //airdrop campaign struct 
-    struct AirDropCampaign {
+     struct  AirDropCampaign {
       string contestName;
       uint32 numberOfWinners;
       address[]  contestants_addresses;
-      uint256[]  winners;
+      uint256[]   winners;
       uint256 announcementDate;
       bool contestDone;
-    }
+      string imageURL;
+      uint256 prizeWorth;
+    } 
 
 
 
-  AirDropCampaign[] public airdropCampaigns;
+   AirDropCampaign[]  public airdropCampaigns;
   
 
 
@@ -147,17 +149,15 @@ contract VRFv2Consumer is VRFConsumerBaseV2 {
   function removeContestant(uint contestIndex, address contestant) external onlyOwner {
     require(contestIndex < airdropCampaigns.length , "Out of bounds");
     uint length = airdropCampaigns[contestIndex].contestants_addresses.length;
-   address[] storage  addressesOfThisContest =  airdropCampaigns[contestIndex].contestants_addresses;
+    address[] memory addressesOfThisContest = new address[](length-1);
+    uint k=0;
       for (uint i = 0; i<length; i++){
-         if( addressesOfThisContest[i]== contestant){
-            for (uint j = i; j<addressesOfThisContest.length-1; j++){
-                addressesOfThisContest[j] = addressesOfThisContest[j+1];
-            }
-          addressesOfThisContest.pop();
-          airdropCampaigns[contestIndex].contestants_addresses = addressesOfThisContest;
+         if(airdropCampaigns[contestIndex].contestants_addresses[i] != contestant){
+           addressesOfThisContest[k] = airdropCampaigns[contestIndex].contestants_addresses[i];
+           k++;
          }
       }
-
+      airdropCampaigns[contestIndex].contestants_addresses = addressesOfThisContest;
   }
 
   function addContestant(uint contestIndex, address contestant_address) external onlyOwner {
@@ -176,13 +176,9 @@ contract VRFv2Consumer is VRFConsumerBaseV2 {
   }
 
     //Configure Contestants and number of winners and Name Of Airdrop Campaign, AnnouncementDate
-  function configureNewAirdrop(string memory name_of_contest,uint32 winners_count,address[] memory  contestant_address_array, uint256 date_of_announcement) external onlyOwner {
-    AirDropCampaign memory campaign;
-    campaign.contestName = name_of_contest;
-    campaign.numberOfWinners = winners_count;
-    campaign.contestants_addresses = contestant_address_array;
-    campaign.contestDone =false;
-    campaign.announcementDate = date_of_announcement;
+  function configureNewAirdrop(string memory name_of_contest,uint32 winners_count,address[] memory  contestant_address_array, uint256 date_of_announcement,string memory imageURL,uint256 prizeWorth) external onlyOwner {
+    uint256[] memory winner;
+    AirDropCampaign memory  campaign = AirDropCampaign(name_of_contest,winners_count,contestant_address_array,winner,date_of_announcement,false,imageURL,prizeWorth);
     airdropCampaigns.push(campaign);
   }
 
@@ -190,6 +186,8 @@ contract VRFv2Consumer is VRFConsumerBaseV2 {
   function drawContest(uint contestIndex) external onlyOwner {
     require(airdropCampaigns[contestIndex].contestDone ==false , "Already Drawn");
      require(contestIndex < airdropCampaigns.length , "Out of bounds");
+     require(block.timestamp > airdropCampaigns[contestIndex].announcementDate , "Cannot draw before announcement date");
+     
     contestants =  airdropCampaigns[contestIndex].contestants_addresses;
   // Will revert if subscription is not set and funded.
     s_requestId = COORDINATOR.requestRandomWords(
@@ -212,17 +210,10 @@ contract VRFv2Consumer is VRFConsumerBaseV2 {
     for (uint i = contestIndex; i<airdropCampaigns.length-1; i++){
           airdropCampaigns[i] = airdropCampaigns[i+1];
       }
-    delete airdropCampaigns[airdropCampaigns.length-1];
-    airdropCampaigns.pop;
+    airdropCampaigns.pop();
   }
 
-   function getWinnersOfAContest(uint contestIndex) external view returns( uint256[] memory) {
-    return airdropCampaigns[contestIndex].winners;
+  function getContests() external view returns(AirDropCampaign[] memory) {
+     return  airdropCampaigns;
    }
-
-     function getContestantsOfAContest(uint contestIndex) external view returns( address[] memory) {
-     return  airdropCampaigns[contestIndex].contestants_addresses;
-   }
-
 }
-
